@@ -22,7 +22,28 @@ hand <- list(player1, player2, player3, kitty)
 }
 
 
-deal()
+
+
+meld_score <- list()
+for (i in 1:10000){print(i)
+pin <- deal()
+meld_score[[i]] <- meld(pin)
+}
+
+meld_score_mat <- do.call(rbind, meld_score)
+cor(meld_score_mat)
+
+plot(meld_score_mat[,1],meld_score_mat[,3])
+
+meld_score_mat <- as.data.frame(meld_score_mat)
+
+library(ggplot2)
+ggplot(aes(x = V1, y = V2, color = factor(V3)) , data = meld_score_mat) + geom_jitter()
+
+
+
+
+
 
 
 
