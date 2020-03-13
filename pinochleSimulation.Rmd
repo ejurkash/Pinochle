@@ -1,0 +1,607 @@
+---
+title: "Pinochle Simulation Study"
+output: html_notebook
+---
+
+# Liz Jurkash  
+## Introduction  
+\par Pinochle is a card game played with 48 cards, 9 through ace, with exactly two of each card. In 3-handed pinochle, each person gets dealt 15 cards with 3 being left in the kitty which no one sees. In pinochle, there is a round of bidding before play where you can record points, called meld, based off of your current hand. Whoever wins the bid gets to declare the trump suit and receives the kitty that is shown to everyone, which is important for both the amount of meld you have. Then, the winner of the bidding also gets to bury three cards but must notify the other players if burying trump or an ace. In play, there are 25 tricks that you can earn, each ace, ten, and king count as 1 trick and whoever takes the last of the cards gets last trick, bring the total up to 25. If you overbid, meaning you bid more than the total number of points you obtained, you go set. This means you get none of the points you earned in the round, and you get the amount you bid subtracted off your score.    
+    
+\par My current problem when I play pinochle with my family is that I often overbid in an attempt to get the kitty. I want to know what the expected value of the kitty actually is so I don't overbid and go set trying to get a specific outcome from the kitty. I don't just want to know the expected value with the kitty, I'd like to know what my chances are of getting a run from the kitty if I already have 4 of the five cards needed. It would also be helpful to know what my odds of getting a double pinochle are if I have 3 of the four cards already. I want to do the same for the aces as well. My ultimate goal is to find an optimal bidding strategy so I can beat my family as much as I can. 
+
+## Methods  
+In order to answer these questions, I will use Monte Carlo simulation. Here is the process I will run through:  
+1. Create a deck of 48 cards: 9 through Ace with two of each card  
+2. Write a function to deal 15 cards to each of the three people and the 3 card kitty so that each card is dealt.  
+3. Create a function to calculate the meld of each player  
+    - Create functions to check for a pinochle, double pinochle, aces, kings, queens, jacks, run, and double run  
+    - Create a function to count the marriages in a hand  
+    - Create a function that appends the kitty to a hand  
+4. Run lots of simulations and calculate the mean to find the mean amount of points you are dealt.  
+5. Run simulations that appends the kitty to a hand and find the mean value of meld when the kitty is added.  
+6. Run simulations to find probabilities of getting a desired outcome in the kitty, given certain cards already in the hand.    
+
+## Results  
+The very first result I thought was important to look at is the average meld per hand. Based on many years playing this game, my simulation seems to be pretty accurate. The average meld is about 7 points before the kitty is added.  
+   
+Now let's take a look at the distribution of player 1's meld over 1000 simulations:
+```{r}
+library(ggplot2)
+set.seed(1243)
+mat1 <- replicate(1000, meld1())
+qplot(mat1, geom="histogram", binwidth=1, main="Distribution of Meld", xlab="Points", ylab="Frequency")
+```
+It's pretty interesting that while 0, 2, and 4 points appear the most, you are still have a roughly 50% chance of getting more points. It is also interesting that you have a less than 15% chance of getting no meld at all.  
+  
+When we add the kitty, our new average meld is about 10.5 points. This is a marked improvement, which makes sense because an extra 3 cards can really change your hand. Let's look at player 1's meld distribution with the added kitty over 1000 simulations:
+```{r}
+library(ggplot2)
+set.seed(1243)
+mat1 <- replicate(1000, adding_kitty1())
+qplot(mat1, geom="histogram", binwidth=1, main="Distribution of Meld with Added Kitty", xlab="Points", ylab="Frequency")
+```
+Look how much our distribution changes when we have the kitty. For one, the range is larger and the chances of getting no points is around 7%. This makes sense given that the kitty raises our average points by about 3.5 points.
+
+![](/Users/lizjurkash/Desktop/Figure1.jpg)
+
+![](/Users/lizjurkash/Desktop/Figure2.jpg)
+
+It seems that if I have at 4 out of the 5 cards required for a run, I have a 1 in 5 chance in getting a run in the kitty. This gives me a bit of a strategy where I should only bid on the kitty if I have a marriage in the suit I'm trying to get a run in, otherwise I might go set if I don't get the run. Basically, I have learned that the kitty helps if you're close to a lot of meld combinations. Overall, the kitty adds around 3.5 to the average number of points you receive and it also lengthens the distribution of points by quite a bit.
+  
+## Conclusions/Future Work  
+In conclusion, I learned that it is not a smart move to bet purely based on what might be in the kitty. You should really only bid on it if you have a decent amount of points already in your hand, or if you are very close to a variety of high meld point combinations. Now that I know the odds of conditional probabilities involving the kitty, I will be less likely to overbid and then go set while playing with my family.  
+  
+For future work, I would like to simulate the full game that involves naming trump, burrying 3 cards, and then playing for tricks. If I had more time, I would code the rules of playing and then devise strategies to run for each player. For instance: is it better to draw trump early or sandbag the ace of trump so you are guaranteed to get the last trick? What are your chances of making your bid if your opponents feed each other tricks? Ideally, I would like to find the best bidding strategy catered to my family members' playing strategies.  
+
+## Appendix  
+
+Starting to simulate pinochle. Here I began by making the deck
+
+```{r}
+entries <- c("9H", "9S", "9D", "9C", "9H", "9S", "9D", "9C", "10H", "10S", "10D", "10C", "10H", "10S", "10D", "10C", "JH", "JS", "JD", "JC", "JH", "JS", "JD", "JC", "QH", "QS", "QD", "QC", "QH", "QS", "QD", "QC","KH", "KS", "KD", "KC", "KH", "KS", "KD", "KC", "AH", "AS", "AD", "AC", "AH", "AS", "AD", "AC")
+
+pinochle_deck <- matrix(entries, nrow = 12, ncol = 4, dimnames = list(c("nine", "nine", "ten","ten", "jack", "jack", "queen", "queen", "king", "king", "ace", "ace"), c("heart", "spade", "diamond", "club")), byrow = TRUE)
+
+pinochle_deck
+```
+
+Now in this cell, I built a function to deal the cards based on sampling from my matrix without replacement
+```{r}
+deal <- function(deck = pinochle_deck) {
+  player1 <- c(sample(pinochle_deck, size = 15, replace = FALSE))
+  player2 <- c(sample(pinochle_deck, size = 15, replace = FALSE))
+  player3 <- c(sample(pinochle_deck, size = 15, replace = FALSE))
+  kitty <- c(sample(pinochle_deck, size = 3, replace = FALSE))
+  hand <- list(player1, player2, player3, kitty)
+  return(hand)
+}
+
+
+```
+
+These next few blocks are all to check for certain meld combinations in a given hand. They all take in a list of vectors and an index number i. These will be used later to run through each player's hand and calculate their meld.  
+This first function checks for a simple pinochle- a Jack of Diamonds and a Queen of Spades. If you have a double pinochle, or do not have a pinochle, this function returns false.  
+```{r}
+has_pinochle <- function(vec, i){
+  if("JD" %in% vec[[i]] & "QS" %in% vec[[i]] & length(grep("QS", vec[[i]])) + length(grep("JD", vec[[i]])) != 4){
+  return(TRUE)
+  }
+  else{
+    return(FALSE)
+  }
+}
+```
+Here this function checks for a double pinochle: both Jacks of Diamonds and both Queens of Spades.  
+```{r}
+double_pinochle <- function(vec, i){
+  if(length(grep("QS", vec[[i]])) == 2 & length(grep("JD", vec[[i]])) == 2){
+    return(TRUE)
+  }
+  else{
+    return(FALSE)
+  }
+}
+```
+Instead of returning TRUE or FALSE, this function counts the number of marriages. Because I had to calculate for double marriages as well as marriages in each suit, this function is longer than the others just checking for the presence of combinations that give you meld.
+```{r}
+marriages <- function(vec, i){
+  count = 0
+  if("KS" %in% vec[[i]] & "QS" %in% vec[[i]]){
+    if(length(grep("KS", vec[[i]])) + length(grep("QS", vec[[i]])) == 4){
+      count = count + 2
+    }
+    else{
+      count = count + 1
+    }
+  }
+  if("KH" %in% vec[[i]] & "QH" %in% vec[[i]]){
+    if(length(grep("KH", vec[[i]])) + length(grep("QH", vec[[i]])) == 4){
+      count = count + 2
+    }
+    else{
+      count = count + 1
+    }
+  }
+  if("KC" %in% vec[[i]] & "QC" %in% vec[[i]]){
+    if(length(grep("KC", vec[[i]])) + length(grep("QC", vec[[i]])) == 4){
+      count = count + 2
+    }
+    else{
+      count = count + 1
+    }
+  }
+  if("KD" %in% vec[[i]] & "QD" %in% vec[[i]]){
+    if(length(grep("KD", vec[[i]])) + length(grep("QD", vec[[i]])) == 4){
+      count = count + 2
+    }
+    else{
+      count = count + 1
+    }
+  }
+  return(count)
+}
+```
+For jacks, you must have a jack of each suit. For forty jacks, you need to have all 8 jacks.
+```{r}
+jacks <- function(vec, i){
+  if("JS" %in% vec[[i]] & "JD" %in% vec[[i]] & "JC" %in% vec[[i]] & "JH" %in% vec[[i]] & length(grep("J", vec[[i]])) != 8){
+    return(TRUE)
+  }
+  else{
+    return(FALSE)
+  }
+}
+```
+
+```{r}
+forty_jacks <- function(vec, i){
+  if(length(grep("J", vec[[i]])) == 8){
+    return(TRUE)
+  }
+  else{
+    return(FALSE)
+  }
+}
+```
+For queens, you need a queen in each suit and for sixty queens you need all 8 queens.
+```{r}
+queens <- function(vec, i){
+  if("QS" %in% vec[[i]] & "QD" %in% vec[[i]] & "QC" %in% vec[[i]] & "QH" %in% vec[[i]] & length(grep("Q", vec[[i]])) != 8){
+    return(TRUE)
+  }
+  else{
+    return(FALSE)
+  }
+}
+```
+
+```{r}
+sixty_queens <- function(vec, i){
+  if(length(grep("Q", vec[[i]])) == 8){
+    return(TRUE)
+  }
+  else{
+    return(FALSE)
+  }
+}
+```
+Kings requires a king in each suit, eighty kings requires all 8.
+```{r}
+kings <- function(vec, i){
+  if("KS" %in% vec[[i]] & "KD" %in% vec[[i]] & "KC" %in% vec[[i]] & "KH" %in% vec[[i]] & length(grep("K", vec[[i]])) != 8){
+    return(TRUE)
+  }
+  else{
+    return(FALSE)
+  }
+}
+```
+
+```{r}
+eighty_kings <- function(vec, i){
+  if(length(grep("K", vec[[i]])) == 8){
+    return(TRUE)
+  }
+  else{
+    return(FALSE)
+  }
+}
+```
+For aces, you need an Ace in each suit and for hundred aces you need all 8.
+```{r}
+aces <- function(vec, i){
+  if("AS" %in% vec[[i]] & "AD" %in% vec[[i]] & "AC" %in% vec[[i]] & "AH" %in% vec[[i]] & length(grep("A", vec[[i]])) != 8){
+    return(TRUE)
+  }
+  else{
+    return(FALSE)
+  }
+}
+```
+
+```{r}
+hundred_aces <- function(vec, i){
+  if(length(grep("A", vec[[i]])) == 8){
+    return(TRUE)
+  }
+  else{
+    return(FALSE)
+  }
+}
+```
+A run is categorized as ace, ten, king, queen, jack in the same suit. If you have runs in more than 1 suit, you can only count one, unless you have a double run.
+```{r}
+run <- function(vec, i){
+  if(("AS" %in% vec[[i]] & "10S" %in% vec[[i]] & "KS" %in% vec[[i]] & "QS" %in% vec[[i]] & "JS" %in% vec[[i]]) | ("AD" %in% vec[[i]] & "10D" %in% vec[[i]] & "KD" %in% vec[[i]] & "QD" %in% vec[[i]] & "JD" %in% vec[[i]]) | ("AC" %in% vec[[i]] & "10C" %in% vec[[i]] & "KC" %in% vec[[i]] & "QC" %in% vec[[i]] & "JC" %in% vec[[i]]) | ("AH" %in% vec[[i]] & "10H" %in% vec[[i]] & "KH" %in% vec[[i]] & "QH" %in% vec[[i]] & "JH" %in% vec[[i]])){
+    return(TRUE)
+  }
+  else{
+    return(FALSE)
+  }
+}
+```
+
+```{r}
+double_run <- function(vec, i){
+  if(length(grep("AS", vec[[i]])) + length(grep("10S", vec[[i]])) + length(grep("KS", vec[[i]])) + length(grep("QS", vec[[i]])) + length(grep("JS", vec[[i]])) == 10 | length(grep("AD", vec[[i]])) + length(grep("10D", vec[[i]])) + length(grep("KD", vec[[i]])) + length(grep("QD", vec[[i]])) + length(grep("JD", vec[[i]])) == 10 | length(grep("AC", vec[[i]])) + length(grep("10C", vec[[i]])) + length(grep("KC", vec[[i]])) + length(grep("QC", vec[[i]])) + length(grep("JC", vec[[i]])) == 10 | length(grep("AH", vec[[i]])) + length(grep("10H", vec[[i]])) + length(grep("KH", vec[[i]])) + length(grep("QH", vec[[i]])) + length(grep("JH", vec[[i]])) == 10){
+    return(TRUE)
+  }
+  else{
+    return(FALSE)
+  }
+}
+```
+
+Now here is my most important function that calculates the points for meld. The points for each are as follows.  
+- Pinochle: 4 points  
+- Double Pinochle: 30 points  
+- Jacks: 4 points  
+- Forty Jacks: 40 points  
+- Queens: 6 points  
+- Sixty Queens: 60 points  
+- Kings: 8 points  
+- Eighty Kings: 80 points  
+- Aces: 10 points  
+- Hundred Aces: 100 points  
+- Run: 15 points  
+- Double Run: 150 points  
+- Marriages: 2 for each marriages, but if your marriage is part of a run, does not count  
+  
+  For the purpose of this function, I am only testing how many points a person has before the trump suit is named because the person who takes the bid names trump. If a marriage is in the trump suit, it is worth 4 points instead of 2 and if you have a 9 of trump it is worth 1 point. 
+```{r}
+meld <- function(hand = deal()){
+  score <- c(0, 0, 0)
+  for(i in 1:3){
+    if(has_pinochle(hand, i)){
+      score[i] = score[i] + 4
+    }
+    if(double_pinochle(hand, i)){
+      score[i] = score[i] + 30
+    }
+    if(jacks(hand, i)){
+      score[i] = score[i] + 4
+    }
+    if(forty_jacks(hand, i)){
+      score[i] = score[i] + 40
+    }
+    if(queens(hand, i)){
+      score[i] = score[i] + 6
+    }
+    if(sixty_queens(hand, i)){
+      score[i] = score[i] + 60
+    }
+    if(kings(hand, i)){
+      score[i] = score[i] + 8
+    }
+    if(eighty_kings(hand, i)){
+      score[i] = score[i] +80
+    }
+    if(aces(hand, i)){
+      score[i] = score[i] + 10
+    }
+    if(hundred_aces(hand, i)){
+      score[i] = score[i] + 10
+    }
+    #Subtract the 2 from one of the marriages
+    if(run(hand, i)){
+      score[i] = score[i] + 15 - 2
+    }
+    
+    #For Double Run, subtract 15 for the run and 4 for the double marriage now part of the run
+    if(double_run(hand, i)){
+      score[i] = score[i] + 150 - 15 - 4
+    }
+    
+    #Adding in the points from marriages
+    score[i] = score[i] + marriages(hand, i)*2
+  }
+  hand
+  return(score)
+}
+
+```
+
+Here, I'm testing to make sure my meld function gives about the same average for every player
+```{r}
+set.seed(1243)
+mat <- replicate(10000, meld())
+apply(mat, 1, mean)
+```
+This meld1 function here is for the purpose of calculating player 1's meld. I used it so I could get a nicer looking histogram using qplot. 
+```{r}
+meld1 <- function(hand = deal()){
+  score <- c(0)
+  i = 1
+    if(has_pinochle(hand, i) == TRUE){
+      score[i] = score[i] + 4
+    }
+    if(double_pinochle(hand, i) == TRUE){
+      score[i] = score[i] + 30
+    }
+    if(jacks(hand, i) == TRUE){
+      score[i] = score[i] + 4
+    }
+    if(forty_jacks(hand, i) == TRUE){
+      score[i] = score[i] + 40
+    }
+    if(queens(hand, i) == TRUE){
+      score[i] = score[i] + 6
+    }
+    if(sixty_queens(hand, i) == TRUE){
+      score[i] = score[i] + 60
+    }
+    if(kings(hand, i) == TRUE){
+      score[i] = score[i] + 8
+    }
+    if(eighty_kings(hand, i) == TRUE){
+      score[i] = score[i] +80
+    }
+    if(aces(hand, i) == TRUE){
+      score[i] = score[i] + 10
+    }
+    if(hundred_aces(hand, i) == TRUE){
+      score[i] = score[i] + 10
+    }
+    #Subtract the 2 from one of the marriages
+    if(run(hand, i) == TRUE){
+      score[i] = score[i] + 15 - 2
+    }
+    
+    #For Double Run, subtract 15 for the run and 4 for the double marriage now part of the run
+    if(double_run(hand, i) == TRUE){
+      score[i] = score[i] + 150 - 15 - 4
+    }
+    
+    score[i] = score[i] + marriages(hand, i)*2
+  
+  hand
+  return(score)
+}
+```
+
+
+Based on 1000 simulations, players are very unlikely to have more than 20 points in their hands dealt to them. Players are also much more likely to have at least 2 points in meld than having no meld. The mode of the distribution is 2. It also looks like a player is a little more likely to have 4 points in meld than 0. Also based on this histogram, player1 gets no meld about 150 times out of 1000. Thus the probability of getting no meld in one's hand is roughly 15%
+```{r}
+library(ggplot2)
+mat1 <- replicate(1000, meld1())
+qplot(mat1, geom="histogram", binwidth=1, main="Distribution of Meld", xlab="Points", ylab="Frequency")
+```
+Just for fun, let's calculate the simulated probabilities of being dealt a run. 
+```{r}
+set.seed(1243)
+mean(replicate(100000, run(deal(), 1)))
+```
+It appears the probability of getting a run is about 12%.    
+Let's check the probability of having aces. The probabilities of getting all four aces is the same as all four kings, queens, and jacks. 
+```{r}
+set.seed(1243)
+mean(replicate(100000, aces(deal(), 1)))
+```
+It seems that the probability of getting an ace of each suit is about 6.5%. The same goes for jacks, queens, and kings.    
+Now let's calculate the simulated probability of a double pinochle.
+```{r}
+set.seed(1243)
+mean(replicate(100000, double_pinochle(deal(), 1)))
+```
+Seems that my probability in being dealt a double pinochle is less than 1%, about .7%
+
+Let's look at the probability of getting a normal pinochle.
+```{r}
+set.seed(1243)
+mean(replicate(100000, has_pinochle(deal(),1)))
+```
+The probability of getting a pinochle is about 26.8% so you should expect to get a pinochle about 1 in 4 hands.    
+Now to answer my question about what the expected value of the kitty is. How much does it really add to your score?  
+
+This function here takes the three card kitty that was set aside earlier and appends it to each person's hand.
+```{r}
+adding_kitty <- function(){
+  hand <- deal()
+  hand[[1]] <- append(hand[[1]], hand[[4]], after = length(18))
+  hand[[2]] <- append(hand[[2]], hand[[4]], after = length(18))
+  hand[[3]] <- append(hand[[3]], hand[[4]], after = length(18))
+  meld(hand)
+}
+```
+
+```{r}
+set.seed(1243)
+mat <- replicate(10000, adding_kitty())
+apply(mat, 1, mean)
+```
+
+```{r}
+adding_kitty1 <- function(){
+  hand <- deal()
+  hand[[1]] <- append(hand[[1]], hand[[4]])
+  meld1(hand)
+}
+adding_kitty1()
+kitty_star <- function(){
+  hand <- deal()
+  hand[[1]] <- append(hand[[1]], hand[[4]])
+  return(hand)
+}
+meld1(kitty_star())
+```
+
+```{r}
+set.seed(1243)
+mat <- replicate(10000, meld1(kitty_star()))
+sum(mat)/10000
+```
+
+
+```{r}
+set.seed(1243)
+mat1 <- replicate(1000, adding_kitty1())
+qplot(mat1, geom="histogram", binwidth=1, main="Distribution of Meld with Added Kitty", xlab="Points", ylab="Frequency")
+```
+
+```{r}
+bid_for_doubleP <- function(){
+  hand <- deal()
+  count <- 0
+  while(length(grep("QS", hand[[1]])) + length(grep("JD", hand[[1]])) != 3){
+    hand <- deal()
+    count <- count + 1
+  }
+  hand[[1]] <- append(hand[[1]], hand[[4]])
+  if(double_pinochle(hand, 1)==TRUE){
+    return(TRUE)
+  }
+  else{
+    return(FALSE)
+  }
+  
+}
+bid_for_doubleP()
+```
+```{r}
+set.seed(1243)
+mean(replicate(10000, bid_for_doubleP()))
+```
+I'm using this function to calculate the conditional probability of getting a run from the kitty if a player does not already have a run in her hand. 
+```{r}
+kitty_run <- function(){
+  hand <- deal()
+  count <- 0
+  while(run(hand, 1) == TRUE){
+    hand <- deal()
+    count <- count + 1
+  }
+  hand[[1]] <- append(hand[[1]], hand[[4]])
+  if(run(hand, 1)==TRUE){
+    return(TRUE)
+  }
+  else{
+    return(FALSE)
+  }
+}
+kitty_run()
+```
+
+```{r}
+set.seed(1243)
+mean(replicate(10000, kitty_run()))
+```
+If you are not dealt a run, you have about an 11% chance of obtaining one from the kitty. This only takes into account the fact that you are not dealth a run.    
+Now let's see what your chances of getting a run from the kitty are if you dealt 4 cards needed for a run.
+
+
+```{r}
+kitty_run4 <- function(){
+  spades <- c("AS" %in% hand[[1]], "10S" %in% hand[[1]], "KS" %in% hand[[1]], "QS" %in% hand[[1]], "JS" %in% hand[[1]])
+
+  hearts <- c("AH" %in% hand[[1]], "10H" %in% hand[[1]], "KS" %in% hand[[1]], "QH" %in% hand[[1]], "JH" %in% hand[[1]])
+
+  clubs <- c("AC" %in% hand[[1]], "10C" %in% hand[[1]], "KC" %in% hand[[1]], "QC" %in% hand[[1]], "JC" %in% hand[[1]])
+
+  diamonds <- c("AD" %in% hand[[1]], "10D" %in% hand[[1]], "KD" %in% hand[[1]], "QD" %in% hand[[1]], "JD" %in% hand[[1]])
+  hand <- deal()
+  while(sum(spades)!=4 & sum(hearts)!=4 & sum(clubs)!=4 & sum(diamonds)!=4 & run(hand, 1)==TRUE){
+    hand <- deal()
+    spades <- c("AS" %in% hand[[1]], "10S" %in% hand[[1]], "KS" %in% hand[[1]], "QS" %in% hand[[1]], "JS" %in% hand[[1]])
+
+  hearts <- c("AH" %in% hand[[1]], "10H" %in% hand[[1]], "KS" %in% hand[[1]], "QH" %in% hand[[1]], "JH" %in% hand[[1]])
+
+  clubs <- c("AC" %in% hand[[1]], "10C" %in% hand[[1]], "KC" %in% hand[[1]], "QC" %in% hand[[1]], "JC" %in% hand[[1]])
+
+  diamonds <- c("AD" %in% hand[[1]], "10D" %in% hand[[1]], "KD" %in% hand[[1]], "QD" %in% hand[[1]], "JD" %in% hand[[1]])
+  }
+  
+  hand[[1]] <- append(hand[[1]], hand[[4]])
+  if(run(hand, 1) == TRUE){
+    return(TRUE)
+  }
+  else{
+    return(FALSE)
+  }
+}
+kitty_run4()
+```
+
+```{r}
+set.seed(1243)
+mean(replicate(10000, kitty_run4()))
+```
+From this, if you have 4 cards needed for a run in at least one suit, you have about a 21% chance of getting a run from the kitty. This is about double the chances of normally getting a run in the kitty. 
+
+
+This function will be used to find the probability of getting aces from the kitty
+```{r}
+kitty_aces <- function(){
+  hand <- deal()
+  while(aces(hand, 1) == TRUE){
+    hand <- deal()
+  }
+  hand[[1]] <- append(hand[[1]], hand[[4]])
+  if(aces(hand, 1) == TRUE){
+    return(TRUE)
+  }
+  else{
+    return(FALSE)
+  }
+}
+kitty_aces()
+```
+
+
+```{r}
+set.seed(1243)
+mean(replicate(10000, kitty_aces()))
+```
+If you don't already have all 4 aces, you have about a 4% chance of getting them in the kitty. Now let's check out if you have 3 of the aces.
+
+```{r}
+kitty_aces4 <- function(){
+  hand <- deal()
+  four_aces <- c("AS" %in% hand[[1]], "AD" %in% hand[[1]], "AC" %in% hand[[1]], "AH" %in% hand[[1]])
+  while(sum(four_aces) != 3){
+    hand <- deal()
+    four_aces <- c("AS" %in% hand[[1]], "AD" %in% hand[[1]], "AC" %in% hand[[1]], "AH" %in% hand[[1]])
+  }
+ hand[[1]] <- append(hand[[1]], hand[[4]])
+ if(aces(hand, 1)==TRUE){
+   return(TRUE)
+ }
+ else{
+   return(FALSE)
+ }
+}
+
+kitty_aces4()
+```
+
+```{r}
+set.seed(1243)
+mean(replicate(10000, kitty_aces4()))
+```
+If you have 3 of the four aces, you have about a 12% chance of getting aces from the kitty.
+
+
+
+
+
+
+
